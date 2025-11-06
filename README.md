@@ -4,8 +4,7 @@
 
 # When Visualizing is the First Step to Reasoning: MIRA, a Benchmark for Visual Chain-of-Thought.
 
-🌟 This is the official evaluation repository for **MIRA (Multimodal Imagination for Reasoning Assessment)**, accompanying the paper  
-**“When Visualizing is the First Step to Reasoning: MIRA, a Benchmark for Visual Chain-of-Thought.”**
+🌟 This is the official evaluation repository for **MIRA (Multimodal Imagination for Reasoning Assessment)**, accompanying the paper: **“When Visualizing is the First Step to Reasoning: MIRA, a Benchmark for Visual Chain-of-Thought.”**
 
 [[📖 ArXiv Paper]](https://arxiv.org/abs/2511.02779)
 [[🌐 Homepage]](https://mira-benchmark.github.io/)
