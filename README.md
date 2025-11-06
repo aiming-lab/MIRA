@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mira.jpg" width="30%" alt="MIRA teaser"> <br>
+  <img src="assets/mira.png" width="15%" alt="MIRA teaser"> <br>
 </p>
 
 # When Visualizing is the First Step to Reasoning: MIRA, a Benchmark for Visual Chain-of-Thought.
