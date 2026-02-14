@@ -14,6 +14,33 @@ MIRA evaluates whether MLLMs can think while drawing—i.e., generate and use in
 This repo currently includes **answer extraction & evaluation** and **accuracy calculation** utilities.
 
 
+## 🚀 Quick Start
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/aiming-lab/MIRA.git
+cd MIRA
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Edit model_config.py — fill in your Azure OpenAI credentials
+#    MODEL_CONFIG  → the model(s) you want to evaluate
+#    JUDGE_CONFIG  → the judge model for LLM-based scoring
+vi model_config.py
+
+# 4. One-click: download data + evaluate + compute accuracy
+./run_eval.sh -m gpt4o        # single model
+# or
+./run_eval.sh                  # all models in MODEL_CONFIG
+```
+
+Results will be saved to `results.txt`. That's it!
+
+> **Note:** If you don't use Azure, you can also evaluate with standard OpenAI — see [Responses Generation](#responses-generation) below.
+
+---
+
 ## 👀 About MIRA
 
 - **Goal:** Test visual chain-of-thought (Visual-CoT) reasoning, not just text-only CoT.
