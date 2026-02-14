@@ -14,67 +14,49 @@ from openai import AzureOpenAI
 from tqdm import tqdm
 from PIL import Image
 
-# ==============================================================================
-# 1. Model Configuration
-# ==============================================================================
-
-MODEL_CONFIG = {
-    "gpt4o": {
-        "model_name": "gpt-4o",
-        "api_key": "your-api-key-here",
-        "api_version": "2024-02-15-preview",
-        "azure_endpoint": "https://your-resource.openai.azure.com/"
-    },
-    "gpt4o-mini": {
-        "model_name": "gpt-4o-mini",
-        "api_key": "your-api-key-here",
-        "api_version": "2024-02-15-preview",
-        "azure_endpoint": "https://your-resource.openai.azure.com/"
-    },
-    # Add more models as needed
-}
+from model_config import MODEL_CONFIG
 
 # ==============================================================================
-# 2. Core Utility Functions
+# 1. Core Utility Functions
 # ==============================================================================
 
 def get_model_client(model_alias):
     """
     Initialize Azure OpenAI client for a specific model.
-    
+
     Args:
         model_alias: Key from MODEL_CONFIG dictionary
-        
+
     Returns:
         Tuple of (client, model_name)
     """
     config = MODEL_CONFIG.get(model_alias)
     if not config:
         raise ValueError(f"Model alias '{model_alias}' not found in MODEL_CONFIG.")
-    
+
     client = AzureOpenAI(
         azure_endpoint=config['azure_endpoint'],
         api_version=config['api_version'],
         api_key=config['api_key'],
     )
-    
+
     return client, config['model_name']
 
 
 def find_image_path(directory: Path, base_filename: str) -> Path | None:
     """
     Find image file in directory with various extensions.
-    
+
     Args:
         directory: Directory to search in
         base_filename: Base name of the image file
-        
+
     Returns:
         Path to image file or None if not found
     """
     if not base_filename:
         return None
-    
+
     base_name = Path(base_filename).stem
     for ext in ['.png', '.jpg', '.jpeg']:
         path = directory / (base_name + ext)
@@ -86,35 +68,35 @@ def find_image_path(directory: Path, base_filename: str) -> Path | None:
 def find_cot_images(cot_dir: Path, main_image_filename: str) -> list[Path]:
     """
     Find chain-of-thought (CoT) images related to the main image.
-    
+
     Args:
         cot_dir: Directory containing CoT images
         main_image_filename: Filename of the main question image
-        
+
     Returns:
         List of paths to CoT images
     """
     if not main_image_filename:
         return []
-    
+
     main_image_stem = Path(main_image_filename).stem
     pattern1 = f"{main_image_stem}.*"
     pattern2 = f"{main_image_stem}_*"
-    
+
     found_files = list(cot_dir.glob(pattern1)) + list(cot_dir.glob(pattern2))
     image_extensions = {'.png', '.jpg', '.jpeg'}
     unique_images = {p for p in found_files if p.suffix.lower() in image_extensions}
-    
+
     return sorted(list(unique_images))
 
 
 def pil_image_to_data_url(img_path: Path) -> str | None:
     """
     Convert PIL image to base64 data URL.
-    
+
     Args:
         img_path: Path to image file
-        
+
     Returns:
         Base64-encoded data URL or None if error
     """
@@ -132,25 +114,25 @@ def pil_image_to_data_url(img_path: Path) -> str | None:
 def call_openai_api_with_retry(client, model_name, messages, max_retries=20):
     """
     Call Azure OpenAI API with exponential backoff retry logic.
-    
+
     Args:
         client: AzureOpenAI client instance
         model_name: Name of the model to use
         messages: List of message dictionaries
         max_retries: Maximum number of retry attempts
-        
+
     Returns:
         API response object or None if all retries failed
     """
     retries = 0
     current_delay = 1
-    
+
     while retries < max_retries:
         try:
             response = client.chat.completions.create(
                 model=model_name,
                 messages=messages,
-                max_tokens=16384,
+                max_tokens=32000,
             )
             return response
         except Exception as e:
@@ -162,7 +144,7 @@ def call_openai_api_with_retry(client, model_name, messages, max_retries=20):
             )
             time.sleep(current_delay)
             current_delay = min(current_delay * 2 + random.uniform(0, 1), 60)
-    
+
     return None
 
 # ==============================================================================
@@ -196,7 +178,7 @@ file_locks = {}
 def process_single_task(client, model_name, model_alias, data_item, task_dir, scenario, output_dir):
     """
     Process a single benchmark task.
-    
+
     Args:
         client: AzureOpenAI client instance
         model_name: Name of the model
@@ -209,11 +191,11 @@ def process_single_task(client, model_name, model_alias, data_item, task_dir, sc
     question = data_item.get('question', '')
     relative_image_path = data_item.get('image_path')
     image_filename = Path(relative_image_path).name if relative_image_path else None
-    
+
     # Build prompt
     prompt_text = PROMPT_TEMPLATES[scenario].format(question=question)
     content_list = []
-    
+
     # Add main question image
     main_img_path = find_image_path(task_dir / "image", image_filename)
     if main_img_path:
@@ -228,7 +210,7 @@ def process_single_task(client, model_name, model_alias, data_item, task_dir, sc
             f"\nWarning: Main image '{image_filename}' not found in {task_dir / 'image'}",
             file=sys.stderr
         )
-    
+
     # Add CoT images if visual_cot scenario
     if scenario == "visual_cot":
         cot_image_paths = find_cot_images(task_dir / "cot", image_filename)
@@ -237,7 +219,7 @@ def process_single_task(client, model_name, model_alias, data_item, task_dir, sc
                 f"\nWarning: No CoT image found for '{image_filename}' in {task_dir / 'cot'}",
                 file=sys.stderr
             )
-        
+
         for cot_path in cot_image_paths:
             cot_img_url = pil_image_to_data_url(cot_path)
             if cot_img_url:
@@ -245,14 +227,14 @@ def process_single_task(client, model_name, model_alias, data_item, task_dir, sc
                     "type": "image_url",
                     "image_url": {"url": cot_img_url}
                 })
-    
+
     # Add text prompt
     content_list.append({"type": "text", "text": prompt_text})
-    
+
     # Call API
     messages = [{"role": "user", "content": content_list}]
     response = call_openai_api_with_retry(client, model_name, messages)
-    
+
     # Prepare result
     result = {
         "uid": data_item.get('uid'),
@@ -261,44 +243,75 @@ def process_single_task(client, model_name, model_alias, data_item, task_dir, sc
         "response": response.choices[0].message.content.strip() if response else "API_CALL_FAILED",
         "original_data": data_item,
     }
-    
+
     # Thread-safe file writing
     output_filename = f"{model_alias}_{task_dir.name}.jsonl"
     output_path = output_dir / output_filename
     lock = file_locks.setdefault(output_path, threading.Lock())
-    
+
     with lock:
         with open(output_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(result, ensure_ascii=False) + '\n')
 
 # ==============================================================================
-# 4. Model-Level Benchmark Runner
+# 3. Model-Level Benchmark Runner
 # ==============================================================================
+
+def _load_done_set(model_alias: str, output_dir: Path) -> dict[str, set[tuple]]:
+    """
+    For this model, scan existing output .jsonl files and return
+    task_name -> set of (uid, scenario) that already have a non-empty response.
+    Treats empty string and "API_CALL_FAILED" as not done (will be (re)generated).
+    """
+    done: dict[str, set[tuple]] = {}
+    for p in output_dir.glob(f"{model_alias}_*.jsonl"):
+        # p.stem = "model_task" -> task_name = p.stem[len(model_alias)+1:]
+        task_name = p.stem[len(model_alias) + 1 :]
+        s = set()
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    r = obj.get("response")
+                    if isinstance(r, str) and r and r != "API_CALL_FAILED":
+                        s.add((obj.get("uid"), obj.get("scenario")))
+        except (OSError, json.JSONDecodeError):
+            pass
+        if s:
+            done[task_name] = s
+    return done
+
 
 def run_benchmark_for_model(model_alias, base_tasks, output_dir, workers_per_model, pbar_position):
     """
     Run all benchmark tasks for a single model with concurrent workers.
-    
-    Args:
-        model_alias: Model identifier
-        base_tasks: List of (data_item, task_dir, scenario) tuples
-        output_dir: Directory to save results
-        workers_per_model: Number of concurrent workers for this model
-        pbar_position: Position for progress bar in terminal
+    Resume by default: skips (uid, scenario) that already have a non-empty response.
     """
     try:
         client, model_name = get_model_client(model_alias)
     except Exception as e:
         print(f"Failed to initialize client for {model_alias}: {e}", file=sys.stderr)
         return
-    
+
+    done = _load_done_set(model_alias, output_dir)
+    filtered = []
+    for data_item, task_dir, scenario in base_tasks:
+        key = (data_item.get("uid"), scenario)
+        if key not in done.get(task_dir.name, set()):
+            filtered.append((data_item, task_dir, scenario))
+
+    if not filtered:
+        return
+
     with ThreadPoolExecutor(max_workers=workers_per_model) as executor:
         progress_bar = tqdm(
-            total=len(base_tasks),
+            total=len(filtered),
             desc=f"Model: {model_alias}",
             position=pbar_position
         )
-        
         futures = {
             executor.submit(
                 process_single_task,
@@ -306,9 +319,8 @@ def run_benchmark_for_model(model_alias, base_tasks, output_dir, workers_per_mod
                 data_item, task_dir, scenario,
                 output_dir
             )
-            for data_item, task_dir, scenario in base_tasks
+            for data_item, task_dir, scenario in filtered
         }
-        
         for future in as_completed(futures):
             try:
                 future.result()
@@ -318,11 +330,10 @@ def run_benchmark_for_model(model_alias, base_tasks, output_dir, workers_per_mod
                     file=sys.stderr
                 )
             progress_bar.update(1)
-        
         progress_bar.close()
 
 # ==============================================================================
-# 5. Main Entry Point
+# 4. Main Entry Point
 # ==============================================================================
 
 def main():
@@ -348,20 +359,25 @@ def main():
         type=int, default=1,
         help="Number of concurrent threads FOR EACH model."
     )
+    parser.add_argument(
+        "-m", "--model",
+        type=str, default=None,
+        help="Run only this model alias (from MODEL_CONFIG). If not set, run all models."
+    )
     args = parser.parse_args()
-    
+
     benchmark_path = Path(args.benchmark_dir)
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Load all benchmark tasks
     base_tasks = []
     jsonl_files = list(benchmark_path.rglob('*.jsonl'))
-    
+
     if not jsonl_files:
         print(f"Error: No .jsonl files found in '{benchmark_path}'. Please check the path.")
         return
-    
+
     print("Loading benchmark data...")
     for jsonl_file in jsonl_files:
         task_dir = jsonl_file.parent
@@ -374,19 +390,22 @@ def main():
                         base_tasks.append((data_item, task_dir, scenario))
                 except json.JSONDecodeError:
                     print(f"Warning: Could not decode a line in {jsonl_file}", file=sys.stderr)
-    
+
     print(f"Found {len(base_tasks)} base tasks to run for each model.")
-    
-    model_aliases = list(MODEL_CONFIG.keys())
+
+    model_aliases = [args.model] if args.model else list(MODEL_CONFIG.keys())
+    if args.model and args.model not in MODEL_CONFIG:
+        print(f"Error: Model '{args.model}' not found in MODEL_CONFIG. Available: {list(MODEL_CONFIG.keys())}", file=sys.stderr)
+        return
     num_models = len(model_aliases)
-    
+
     # Use a main thread pool to manage parallel execution across models
     with ThreadPoolExecutor(max_workers=num_models) as main_executor:
         print(
             f"\nStarting benchmark run for {num_models} models, "
             f"each with {args.workers_per_model} worker(s)..."
         )
-        
+
         # Submit a benchmark runner for each model
         futures = [
             main_executor.submit(
@@ -396,7 +415,7 @@ def main():
             )
             for idx, alias in enumerate(model_aliases)
         ]
-        
+
         # Wait for all models to complete
         for future in as_completed(futures):
             try:
@@ -406,7 +425,7 @@ def main():
                     f'\nA model-level runner generated an exception: {exc}',
                     file=sys.stderr
                 )
-    
+
     print("\n\nAll benchmark runs completed.")
     print(f"Results saved in: {output_path.resolve()}")
 
