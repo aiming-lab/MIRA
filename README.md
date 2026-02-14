@@ -24,10 +24,9 @@ cd MIRA
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Edit model_config.py — fill in your Azure OpenAI credentials
+# 3. Open model_config.py and fill in your Azure OpenAI credentials
 #    MODEL_CONFIG  → the model(s) you want to evaluate
 #    JUDGE_CONFIG  → the judge model for LLM-based scoring
-vi model_config.py
 
 # 4. One-click: download data + evaluate + compute accuracy
 ./run_eval.sh -m gpt4o        # single model
